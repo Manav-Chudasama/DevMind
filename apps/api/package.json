@@ -3,13 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "dev": "bun --watch --env-file=../../.env src/index.ts",
+    "start": "bun --env-file=../../.env src/index.ts"
   },
   "dependencies": {
+    "@devmind/shared": "workspace:*",
+    "bullmq": "^6.3.8",
     "express": "^4.21.2",
     "ioredis": "^5.3.2",
-    "postgres": "^3.4.5"
+    "octokit": "^5.0.5",
+    "postgres": "^3.4.5",
+    "simple-git": "^3.36.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

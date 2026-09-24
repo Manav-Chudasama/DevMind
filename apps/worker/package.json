@@ -3,8 +3,8 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "bun --watch src/index.ts",
-    "start": "bun src/index.ts"
+    "dev": "bun --watch --env-file=../../.env src/index.ts",
+    "start": "bun --env-file=../../.env src/index.ts"
   },
   "dependencies": {
     "ioredis": "^5.3.2",

@@ -4,7 +4,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- ─── Repos ────────────────────────────────────────────────────────────────────
 CREATE TABLE repos (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-  github_url  TEXT        NOT NULL,
+  github_url  TEXT        NOT NULL UNIQUE,   -- one row per GitHub URL (idempotent register)
   owner       TEXT        NOT NULL,
   repo_name   TEXT        NOT NULL,
   clone_path  TEXT,

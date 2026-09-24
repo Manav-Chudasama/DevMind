@@ -1,24 +1,37 @@
 import express from "express";
-import postgres from "postgres";
 import Redis from "ioredis";
-
-const app = express();
-app.use(express.json());
+import { sql } from "./db/client";
+import { closeQueues } from "./services/queue";
+import reposRouter from "./routes/repos";
+import jobsRouter from "./routes/jobs";
+import webhookRouter from "./routes/webhook";
 
 const PORT = process.env.PORT ?? 8080;
-const DATABASE_URL =
-  process.env.DATABASE_URL ?? "postgresql://admin:secret@localhost:5432/devmind";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 const WORKER_HEALTH_URL =
   process.env.WORKER_HEALTH_URL ?? "http://localhost:8081/health";
 
-// ─── DB + Redis clients ───────────────────────────────────────────────────────
-const sql = postgres(DATABASE_URL, { max: 5 });
+// Redis client used *only* by /health. Kept separate from BullMQ's connection
+// so a slow health probe never blocks queue ops (and vice versa).
 const redis = new Redis(REDIS_URL, { lazyConnect: true });
 
-// ─── Routes ───────────────────────────────────────────────────────────────────
+const app = express();
 
-// Timeout helper — keeps ioredis's silent offline queue from hanging us
+// ─── Route mounting order matters ─────────────────────────────────────────────
+// The webhook receiver must see the RAW body so it can verify the HMAC over the
+// exact bytes GitHub signed. Global express.json() is mounted AFTER so it only
+// applies to the JSON API routes below.
+app.use(
+  "/api/webhook",
+  express.raw({ type: "application/json", limit: "2mb" }),
+  webhookRouter
+);
+app.use(express.json());
+app.use("/api/repos", reposRouter);
+app.use("/api/jobs", jobsRouter);
+
+// ─── Health ───────────────────────────────────────────────────────────────────
+
 const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
   Promise.race([
     promise,
@@ -26,8 +39,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
   ]);
 
 app.get("/health", async (_req, res) => {
-  // Check each dependency independently so one failure doesn't hide the others
-  const postgres = await withTimeout(
+  const postgresStatus = await withTimeout(
     sql`SELECT 1`.then(() => "up" as const).catch(() => "down" as const),
     1500,
     "down" as const
@@ -53,8 +65,8 @@ app.get("/health", async (_req, res) => {
   );
 
   res.json({
-    status: "ok", // API itself is up if we reached this line
-    postgres,
+    status: "ok",
+    postgres: postgresStatus,
     redis: redisStatus,
     worker,
   });
@@ -70,9 +82,21 @@ async function start() {
     await redis.connect();
     console.log("[api] redis connected");
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`[api] listening on http://localhost:${PORT}`);
     });
+
+    // Graceful shutdown — close HTTP listener, then queues, then DB/Redis.
+    const shutdown = async (signal: string) => {
+      console.log(`[api] received ${signal}, shutting down...`);
+      server.close();
+      await closeQueues();
+      await redis.quit().catch(() => {});
+      await sql.end({ timeout: 5 });
+      process.exit(0);
+    };
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
   } catch (err) {
     console.error("[api] startup failed:", err);
     process.exit(1);
