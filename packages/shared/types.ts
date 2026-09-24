@@ -15,7 +15,10 @@ export interface Repo {
 
 // ─── Job ──────────────────────────────────────────────────────────────────────
 
-export type JobStatus = "queued" | "running" | "done" | "failed";
+// "declined" = the agent judged the issue not to be an actionable code change
+// and replied on GitHub instead of opening a PR. Distinct from "failed", which
+// means the run itself broke.
+export type JobStatus = "queued" | "running" | "done" | "declined" | "failed";
 
 export interface Job {
   id: string;

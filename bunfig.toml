@@ -1,0 +1,5 @@
+# On Windows, a Ctrl+C / closed terminal used to leave bun descendants alive
+# (Job Object breakaway via cmd.exe shims). Bun 1.3+ reaps the tree when this
+# is on. Harmless no-op on older versions and on non-Windows.
+[run]
+noOrphans = true

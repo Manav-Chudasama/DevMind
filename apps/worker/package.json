@@ -3,17 +3,23 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "bun --watch --env-file=../../.env src/index.ts",
+    "dev": "bun --env-file=../../.env src/index.ts",
     "start": "bun --env-file=../../.env src/index.ts"
   },
   "dependencies": {
     "@devmind/shared": "workspace:*",
+    "@langchain/langgraph": "^1.4.17",
     "bullmq": "^6.3.8",
+    "diff": "^9.0.0",
     "ioredis": "^5.3.2",
+    "octokit": "^5.0.5",
     "openai": "^7.23.0",
-    "postgres": "^3.4.5"
+    "postgres": "^3.4.5",
+    "simple-git": "^3.36.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@types/diff": "^8.0.0",
     "bun-types": "latest",
     "typescript": "^5.6.3"
   }

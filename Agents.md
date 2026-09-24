@@ -20,6 +20,10 @@ An autonomous multi-agent platform that watches GitHub repos and automatically f
 - `bun --watch src/index.ts` — watch mode (replaces nodemon/tsx)
 - `bunx <tool>` — replaces npx
 
+The **worker does not use `--watch`**. Agent jobs run for tens of seconds; a file-save restart mid-run orphans the BullMQ consumer. Combined with a Windows Bun bug (custom `SIGINT` handler + `Bun.serve` under `--watch` leaves the old process alive, bun#32400), that used to produce multiple workers competing on the same queue. Restart the worker yourself after code changes. If a port is stuck, `bun run kill:dev`.
+
+The worker also takes a Redis lock (`devmind:worker:lock`) so a second instance refuses to start.
+
 ## Monorepo Layout
 
 ```
@@ -40,8 +44,9 @@ devmind/
 Root dev scripts (run from repo root):
 ```
 bun run dev:api      → starts apps/api in watch mode
-bun run dev:worker   → starts apps/worker in watch mode
+bun run dev:worker   → starts apps/worker (no --watch — see below)
 bun run dev:ui       → starts apps/ui (Next.js dev)
+bun run kill:dev     → kill leftover bun processes on 8080/8081/3000 (Windows)
 bun run infra:up     → docker compose up -d
 bun run infra:down   → docker compose down
 ```
@@ -126,10 +131,10 @@ Graph state is in `packages/shared/types.ts` as `GraphState`.
 
 | Phase | What ships | Status |
 |---|---|---|
-| 1 | Monorepo scaffold + Docker infra + app health checks | In progress |
-| 2 | Express routes + BullMQ queue publisher + webhook receiver | Pending |
-| 3 | RAG indexer (chunker + embedder + retriever) | Pending |
-| 4 | Full LangGraph agent pipeline | Pending |
+| 1 | Monorepo scaffold + Docker infra + app health checks | Done |
+| 2 | Express routes + BullMQ queue publisher + webhook receiver | Done |
+| 3 | RAG indexer (chunker + embedder + retriever) | Done |
+| 4 | Full LangGraph agent pipeline | Done |
 | 5 | Next.js dashboard + SSE log streaming | Pending |
 | 6 | Polish, Dockerfiles for apps, deployment | Pending |
 

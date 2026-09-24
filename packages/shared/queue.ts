@@ -27,4 +27,9 @@ export interface FixIssueJob {
   issueNumber: number;
   issueTitle: string;
   issueBody: string;
+  /**
+   * Absolute path to the local clone. Optional because jobs enqueued before
+   * Phase 4 don't carry it — the handler falls back to repos.clone_path.
+   */
+  clonePath?: string;
 }

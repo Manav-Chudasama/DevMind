@@ -81,6 +81,7 @@ router.post("/:repo_id", async (req: Request, res: Response) => {
       issueNumber: issue.number,
       issueTitle: issue.title ?? "",
       issueBody: issue.body ?? "",
+      clonePath: repo.clone_path,
     });
 
     return res.status(202).json({ jobId: job.id });

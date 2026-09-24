@@ -6,6 +6,7 @@
     "dev:api": "bun run --cwd apps/api dev",
     "dev:worker": "bun run --cwd apps/worker dev",
     "dev:ui": "bun run --cwd apps/ui dev",
+    "kill:dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/kill-dev.ps1",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
     "infra:logs": "docker compose logs -f"

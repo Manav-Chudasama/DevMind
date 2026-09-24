@@ -21,13 +21,23 @@ const MAX_INPUT_CHARS = 7500 * 3;
 
 const MAX_RETRIES = 5;
 
+/**
+ * Without this the SDK waits 10 minutes before giving up, which turns a dropped
+ * connection into a silently stalled job rather than a visible failure.
+ */
+const REQUEST_TIMEOUT_MS = Number(process.env.EMBED_TIMEOUT_MS ?? 60_000);
+
 let _client: OpenAI | null = null;
 function client(): OpenAI {
   if (!_client) {
     if (!process.env.OPENAI_API_KEY) {
       throw new Error("OPENAI_API_KEY is not set — cannot embed");
     }
-    _client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: REQUEST_TIMEOUT_MS,
+      maxRetries: 0, // handled below
+    });
   }
   return _client;
 }
@@ -62,12 +72,16 @@ export async function embedBatch(texts: string[]): Promise<number[][]> {
     } catch (err: any) {
       lastError = err;
       const status = err?.status ?? err?.response?.status;
-      const retryable = status === 429 || (status >= 500 && status < 600);
+      const isTransport =
+        err?.name === "APIConnectionTimeoutError" ||
+        err?.name === "APIConnectionError";
+      const retryable =
+        isTransport || status === 429 || (status >= 500 && status < 600);
       if (!retryable || attempt === MAX_RETRIES - 1) throw err;
 
       const delay = 1000 * 2 ** attempt;
       console.warn(
-        `[embedder] ${status} on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`
+        `[embedder] ${status ?? err?.name} on attempt ${attempt + 1}/${MAX_RETRIES}, retrying in ${delay}ms`
       );
       await sleep(delay);
     }
