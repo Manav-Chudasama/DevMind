@@ -1,7 +1,8 @@
 type HealthStatus = {
   status: string;
-  postgres: string;
-  redis: string;
+  postgres: "up" | "down";
+  redis: "up" | "down";
+  worker: "up" | "down";
 };
 
 async function getHealth(): Promise<HealthStatus | null> {
@@ -42,15 +43,19 @@ export default async function HomePage() {
         <tbody>
           <tr>
             <td style={{ padding: "0.5rem 1rem 0.5rem 0", color: "#8b949e" }}>API (Express :8080)</td>
-            <td>{health ? dot(health.status === "ok") : dot(false)}</td>
+            <td>{dot(health?.status === "ok")}</td>
           </tr>
           <tr>
             <td style={{ padding: "0.5rem 1rem 0.5rem 0", color: "#8b949e" }}>Postgres + pgvector</td>
-            <td>{health ? dot(health.postgres === "up") : dot(false)}</td>
+            <td>{dot(health?.postgres === "up")}</td>
           </tr>
           <tr>
             <td style={{ padding: "0.5rem 1rem 0.5rem 0", color: "#8b949e" }}>Redis Stack</td>
-            <td>{health ? dot(health.redis === "up") : dot(false)}</td>
+            <td>{dot(health?.redis === "up")}</td>
+          </tr>
+          <tr>
+            <td style={{ padding: "0.5rem 1rem 0.5rem 0", color: "#8b949e" }}>Worker (BullMQ)</td>
+            <td>{dot(health?.worker === "up")}</td>
           </tr>
         </tbody>
       </table>
@@ -58,6 +63,11 @@ export default async function HomePage() {
       {!health && (
         <p style={{ color: "#8b949e", fontSize: "0.875rem", marginTop: "1rem" }}>
           Start the API with: <code style={{ color: "#79c0ff" }}>bun run dev:api</code>
+        </p>
+      )}
+      {health?.worker === "down" && (
+        <p style={{ color: "#8b949e", fontSize: "0.875rem", marginTop: "1rem" }}>
+          Worker not detected. Start it with: <code style={{ color: "#79c0ff" }}>bun run dev:worker</code>
         </p>
       )}
 

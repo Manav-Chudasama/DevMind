@@ -9,6 +9,8 @@ const PORT = process.env.PORT ?? 8080;
 const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgresql://admin:secret@localhost:5432/devmind";
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+const WORKER_HEALTH_URL =
+  process.env.WORKER_HEALTH_URL ?? "http://localhost:8081/health";
 
 // ─── DB + Redis clients ───────────────────────────────────────────────────────
 const sql = postgres(DATABASE_URL, { max: 5 });
@@ -16,20 +18,46 @@ const redis = new Redis(REDIS_URL, { lazyConnect: true });
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
-app.get("/health", async (_req, res) => {
-  try {
-    await sql`SELECT 1`;
-    const pong = await redis.ping();
+// Timeout helper — keeps ioredis's silent offline queue from hanging us
+const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
 
-    res.json({
-      status: "ok",
-      postgres: "up",
-      redis: pong === "PONG" ? "up" : "degraded",
-    });
-  } catch (err) {
-    console.error("[api] health check failed:", err);
-    res.status(503).json({ status: "error", error: String(err) });
-  }
+app.get("/health", async (_req, res) => {
+  // Check each dependency independently so one failure doesn't hide the others
+  const postgres = await withTimeout(
+    sql`SELECT 1`.then(() => "up" as const).catch(() => "down" as const),
+    1500,
+    "down" as const
+  );
+
+  const redisStatus = await withTimeout(
+    redis
+      .ping()
+      .then((p) => (p === "PONG" ? ("up" as const) : ("down" as const)))
+      .catch(() => "down" as const),
+    1000,
+    "down" as const
+  );
+
+  // Worker health — ping the worker's own HTTP endpoint. Independent of Redis;
+  // if the worker process is dead, the socket refuses instantly.
+  const worker = await withTimeout(
+    fetch(WORKER_HEALTH_URL, { signal: AbortSignal.timeout(800) })
+      .then((r) => (r.ok ? ("up" as const) : ("down" as const)))
+      .catch(() => "down" as const),
+    1000,
+    "down" as const
+  );
+
+  res.json({
+    status: "ok", // API itself is up if we reached this line
+    postgres,
+    redis: redisStatus,
+    worker,
+  });
 });
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
