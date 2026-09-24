@@ -1,0 +1,36 @@
+---
+description: DevMind project-wide conventions — runtime, structure, and phase boundaries
+alwaysApply: true
+---
+
+# DevMind Conventions
+
+## Runtime: Bun (not Node)
+- Use `bun`, `bun add`, `bun run`, `bun --watch`, `bunx` everywhere
+- Never suggest `node`, `ts-node`, `tsx`, `nodemon`, `npm install`, `npx`
+
+## Monorepo
+- Three apps: `apps/api` (Express :8080), `apps/worker` (BullMQ), `apps/ui` (Next.js :3000)
+- One shared types package: `packages/shared` (@devmind/shared) — no runtime logic, types only
+- Docker is for infra only: Postgres+pgvector, Redis Stack, RedisInsight
+
+## Phase Boundaries (do not add early)
+- No Dockerfiles for apps until Phase 6
+- No BullMQ consumers or queue logic until Phase 2
+- No LangGraph / agent code until Phase 4
+- No dashboard pages or SSE until Phase 5
+
+## GitHub MCP — STRICTLY READ-ONLY
+The `user-github` MCP namespace must never be used for writes.
+Forbidden: create_repository, push_files, create_pull_request, merge_pull_request,
+create_issue, add_issue_comment, create_branch, create_webhook, and any other mutating tool.
+
+## Database
+- Use the `postgres` npm package (postgresjs) for Postgres — not `pg`
+- Use `ioredis` for Redis
+- Schema lives in `apps/api/src/db/schema.sql` — auto-applied by docker-compose on first boot
+
+## TypeScript
+- `"moduleResolution": "bundler"` in all tsconfigs (Bun native)
+- `"target": "ESNext"`, `"module": "ESNext"`
+- `strict: true` always on

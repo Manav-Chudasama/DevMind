@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Bun
+bun.lockb
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist/
+.next/
+out/
+build/
+
+# Cloned repos (DevMind runtime data)
+repos/
+
+# Logs
+*.log
+npm-debug.log*
+bun-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes
+postgres_data/
+redis_data/

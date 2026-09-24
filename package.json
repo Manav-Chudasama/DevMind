@@ -1,0 +1,13 @@
+{
+  "name": "devmind",
+  "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev:api": "bun run --cwd apps/api dev",
+    "dev:worker": "bun run --cwd apps/worker dev",
+    "dev:ui": "bun run --cwd apps/ui dev",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f"
+  }
+}

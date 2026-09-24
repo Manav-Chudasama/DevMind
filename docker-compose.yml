@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: devmind-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: devmind
+    volumes:
+      - ./apps/api/src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d devmind"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: devmind-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    container_name: devmind-redisinsight
+    ports:
+      - "8001:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

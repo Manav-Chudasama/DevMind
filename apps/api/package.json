@@ -1,0 +1,19 @@
+{
+  "name": "@devmind/api",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ioredis": "^5.3.2",
+    "postgres": "^3.4.5"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "bun-types": "latest",
+    "typescript": "^5.6.3"
+  }
+}
