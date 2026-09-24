@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { simpleGit } from "simple-git";
 import { sql } from "../db/client";
-import { parseGithubUrl, registerWebhook } from "./github";
+import { parseGithubUrl, ensureWebhook } from "./github";
 import { enqueueIndexRepo } from "./queue";
 import type { Repo } from "@devmind/shared";
 
@@ -78,13 +78,16 @@ export async function registerRepo(githubUrlInput: string): Promise<RegisterResu
     // Shallow clone — full history isn't needed for RAG.
     await simpleGit().clone(githubUrl, clonePath, ["--depth", "1"]);
 
-    // Step 4 — webhook. Callback URL uses the row id so we can route in the handler.
+    // Step 4 — webhook. Callback URL uses the row id so we can route in the
+    // handler. Idempotent: reuses/updates an existing hook rather than adding a
+    // duplicate, which matters on retries and after a tunnel URL change.
     const callbackUrl = `${PUBLIC_URL}/api/webhook/${repoId}`;
-    const webhookId = await registerWebhook({
+    const { webhookId, action } = await ensureWebhook({
       owner,
       repo: repoName,
       callbackUrl,
     });
+    console.log(`[repo] webhook ${action} (${webhookId}) -> ${callbackUrl}`);
 
     // Step 5 — persist infra facts on the row. Reset status to 'pending' so a
     // successful retry clears a prior 'error'. Indexer (Phase 3) moves it to

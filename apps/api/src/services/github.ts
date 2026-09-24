@@ -61,25 +61,80 @@ export function parseGithubUrl(input: string): ParsedRepo {
 
 // ─── Webhook management ───────────────────────────────────────────────────────
 
-export interface RegisterWebhookArgs {
+export interface EnsureWebhookArgs {
   owner: string;
   repo: string;
   callbackUrl: string; // full https URL GitHub will POST to
 }
 
+export interface EnsureWebhookResult {
+  webhookId: string;
+  action: "created" | "reused" | "updated";
+}
+
+const WEBHOOK_EVENTS = ["issues"];
+
 /**
- * Creates a webhook on the given repo that listens for `issues` events.
- * Returns the numeric hook id (stored as text in the `repos.webhook_id` column).
+ * Idempotently ensures exactly one DevMind webhook exists on the repo.
  *
- * Throws if the token lacks `admin:repo_hook` scope or the repo doesn't exist.
+ * Identity is matched on the callback URL's *path* (`/api/webhook/<repoId>`),
+ * not the full URL, because the host changes every time an ngrok/devtunnel
+ * session restarts. Matching on the full URL would treat a tunnel restart as a
+ * brand new hook and pile up duplicates, with every stale one delivering to a
+ * dead host.
+ *
+ * Always PATCHes the config on the reuse path so a rotated
+ * GITHUB_WEBHOOK_SECRET propagates instead of silently breaking signature
+ * verification.
  */
-export async function registerWebhook({
+export async function ensureWebhook({
   owner,
   repo,
   callbackUrl,
-}: RegisterWebhookArgs): Promise<string> {
+}: EnsureWebhookArgs): Promise<EnsureWebhookResult> {
   if (!GITHUB_WEBHOOK_SECRET) {
     throw new Error("GITHUB_WEBHOOK_SECRET must be set before registering webhooks");
+  }
+
+  const config = {
+    url: callbackUrl,
+    content_type: "json" as const,
+    secret: GITHUB_WEBHOOK_SECRET,
+    insecure_ssl: "0" as const,
+  };
+
+  const targetPath = new URL(callbackUrl).pathname;
+
+  const { data: hooks } = await octokit().request("GET /repos/{owner}/{repo}/hooks", {
+    owner,
+    repo,
+    per_page: 100,
+  });
+
+  const existing = hooks.find((h) => {
+    const url = h.config?.url;
+    if (!url) return false;
+    try {
+      return new URL(url).pathname === targetPath;
+    } catch {
+      return false;
+    }
+  });
+
+  if (existing) {
+    const urlChanged = existing.config?.url !== callbackUrl;
+    await octokit().request("PATCH /repos/{owner}/{repo}/hooks/{hook_id}", {
+      owner,
+      repo,
+      hook_id: existing.id,
+      active: true,
+      events: WEBHOOK_EVENTS,
+      config,
+    });
+    return {
+      webhookId: String(existing.id),
+      action: urlChanged ? "updated" : "reused",
+    };
   }
 
   const { data } = await octokit().request("POST /repos/{owner}/{repo}/hooks", {
@@ -87,16 +142,11 @@ export async function registerWebhook({
     repo,
     name: "web",
     active: true,
-    events: ["issues"],
-    config: {
-      url: callbackUrl,
-      content_type: "json",
-      secret: GITHUB_WEBHOOK_SECRET,
-      insecure_ssl: "0",
-    },
+    events: WEBHOOK_EVENTS,
+    config,
   });
 
-  return String(data.id);
+  return { webhookId: String(data.id), action: "created" };
 }
 
 export async function deleteWebhook(
