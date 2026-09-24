@@ -37,5 +37,11 @@ CREATE TABLE embeddings (
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Cosine similarity index for RAG retrieval (Phase 3)
-CREATE INDEX ON embeddings USING ivfflat (embedding vector_cosine_ops);
+-- Cosine similarity index for RAG retrieval (Phase 3).
+-- HNSW, not ivfflat: ivfflat computes cluster centroids at build time, so an
+-- index created on an empty table (which is what happens here on first boot)
+-- has no meaningful centroids and recalls poorly. HNSW builds incrementally.
+CREATE INDEX ON embeddings USING hnsw (embedding vector_cosine_ops);
+
+-- Every retrieval filters by repo_id before ranking.
+CREATE INDEX ON embeddings (repo_id);

@@ -33,14 +33,33 @@ const defaultJobOptions = {
   removeOnFail: { count: 5000 },
 };
 
-export async function enqueueIndexRepo(payload: IndexRepoJob): Promise<string> {
-  // jobId = repoId ensures we never enqueue two index jobs for the same repo
-  // simultaneously (BullMQ dedupes by jobId).
+export interface EnqueueResult {
+  jobId: string;
+  /** False when an equivalent job was already queued or running. */
+  enqueued: boolean;
+}
+
+export async function enqueueIndexRepo(
+  payload: IndexRepoJob
+): Promise<EnqueueResult> {
+  // jobId = repoId dedupes concurrent index runs for the same repo. The catch
+  // is that a *finished* job (completed or failed) keeps occupying that id and
+  // silently blocks re-adding, so a retry would look like it worked and never
+  // run. Clear the terminal job first; leave in-flight ones alone.
+  const existing = await indexRepoQueue.getJob(payload.repoId);
+  if (existing) {
+    const state = await existing.getState();
+    if (state === "active" || state === "waiting" || state === "delayed") {
+      return { jobId: existing.id!, enqueued: false };
+    }
+    await existing.remove().catch(() => {});
+  }
+
   const job = await indexRepoQueue.add("index-repo", payload, {
     ...defaultJobOptions,
     jobId: payload.repoId,
   });
-  return job.id!;
+  return { jobId: job.id!, enqueued: true };
 }
 
 export async function enqueueFixIssue(payload: FixIssueJob): Promise<string> {

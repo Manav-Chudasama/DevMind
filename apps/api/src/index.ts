@@ -8,8 +8,9 @@ import webhookRouter from "./routes/webhook";
 
 const PORT = process.env.PORT ?? 8080;
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
-const WORKER_HEALTH_URL =
-  process.env.WORKER_HEALTH_URL ?? "http://localhost:8081/health";
+const WORKER_BASE_URL = (
+  process.env.WORKER_BASE_URL ?? "http://localhost:8081"
+).replace(/\/+$/, "");
 
 // Redis client used *only* by /health. Kept separate from BullMQ's connection
 // so a slow health probe never blocks queue ops (and vice versa).
@@ -57,7 +58,7 @@ app.get("/health", async (_req, res) => {
   // Worker health — ping the worker's own HTTP endpoint. Independent of Redis;
   // if the worker process is dead, the socket refuses instantly.
   const worker = await withTimeout(
-    fetch(WORKER_HEALTH_URL, { signal: AbortSignal.timeout(800) })
+    fetch(`${WORKER_BASE_URL}/health`, { signal: AbortSignal.timeout(800) })
       .then((r) => (r.ok ? ("up" as const) : ("down" as const)))
       .catch(() => "down" as const),
     1000,
