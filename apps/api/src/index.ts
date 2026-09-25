@@ -1,7 +1,7 @@
 import express from "express";
 import Redis from "ioredis";
 import { sql } from "./db/client";
-import { closeQueues } from "./services/queue";
+import { closeQueues, getQueueStats } from "./services/queue";
 import reposRouter from "./routes/repos";
 import jobsRouter from "./routes/jobs";
 import webhookRouter from "./routes/webhook";
@@ -30,6 +30,15 @@ app.use(
 app.use(express.json());
 app.use("/api/repos", reposRouter);
 app.use("/api/jobs", jobsRouter);
+
+app.get("/api/queues", async (_req, res) => {
+  try {
+    const stats = await getQueueStats();
+    res.json(stats);
+  } catch (err: any) {
+    res.status(500).json({ error: "failed_to_fetch_queue_stats", message: err?.message });
+  }
+});
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 

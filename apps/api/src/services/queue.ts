@@ -72,6 +72,28 @@ export async function enqueueFixIssue(payload: FixIssueJob): Promise<string> {
   return job.id!;
 }
 
+export async function getQueueStats() {
+  const [indexCounts, fixCounts] = await Promise.all([
+    indexRepoQueue.getJobCounts("active", "waiting", "completed", "failed"),
+    fixIssueQueue.getJobCounts("active", "waiting", "completed", "failed"),
+  ]);
+
+  return {
+    indexRepo: {
+      active: indexCounts.active ?? 0,
+      waiting: indexCounts.waiting ?? 0,
+      completed: indexCounts.completed ?? 0,
+      failed: indexCounts.failed ?? 0,
+    },
+    fixIssue: {
+      active: fixCounts.active ?? 0,
+      waiting: fixCounts.waiting ?? 0,
+      completed: fixCounts.completed ?? 0,
+      failed: fixCounts.failed ?? 0,
+    },
+  };
+}
+
 // Exposed for graceful shutdown from index.ts.
 export async function closeQueues(): Promise<void> {
   await Promise.allSettled([indexRepoQueue.close(), fixIssueQueue.close()]);

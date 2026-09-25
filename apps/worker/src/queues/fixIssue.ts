@@ -4,6 +4,8 @@ import { sql } from "../db/client";
 import { buildPipeline } from "../graph/pipeline";
 import { postIssueComment } from "../tools/githubWrite";
 
+import { publishJobLog, publishJobStatus } from "../services/pubsub";
+
 export interface FixIssueResult {
   status: JobStatus;
   prUrl: string;
@@ -42,56 +44,89 @@ export async function handleFixIssue(
     clonePath = repo?.clone_path;
   }
   if (!clonePath) {
-    await persist(d.jobId, "failed", [
-      {
-        agent: "system",
-        message: "no clone_path for this repo — cannot read code",
-        timestamp: new Date().toISOString(),
-      },
-    ]);
+    const errorLog: AgentLog = {
+      agent: "system",
+      message: "no clone_path for this repo — cannot read code",
+      timestamp: new Date().toISOString(),
+    };
+    await persist(d.jobId, "failed", [errorLog]);
+    await publishJobLog(d.jobId, errorLog);
+    await publishJobStatus(d.jobId, "failed");
     throw new Error(`${tag} repo ${d.repoId} has no clone on disk`);
   }
 
   await sql`UPDATE jobs SET status = 'running' WHERE id = ${d.jobId}`;
+  await publishJobStatus(d.jobId, "running");
   console.log(`${tag} ${d.issueTitle}`);
 
   try {
     const pipeline = buildPipeline();
-    const final = await pipeline.invoke({
-      jobId: d.jobId,
-      repoId: d.repoId,
-      owner: d.owner,
-      repoName: d.repoName,
-      issueNumber: d.issueNumber,
-      issueTitle: d.issueTitle,
-      issueBody: d.issueBody ?? "",
-      clonePath,
-    });
+    const stream = await pipeline.stream(
+      {
+        jobId: d.jobId,
+        repoId: d.repoId,
+        owner: d.owner,
+        repoName: d.repoName,
+        issueNumber: d.issueNumber,
+        issueTitle: d.issueTitle,
+        issueBody: d.issueBody ?? "",
+        clonePath,
+      },
+      { streamMode: "updates" }
+    );
+
+    let action: "fix" | "decline" = "decline";
+    let prUrl = "";
+    let iterationCount = 0;
+    let reviewScore = 0;
+    const accumulatedLogs: AgentLog[] = [];
+
+    for await (const chunk of stream) {
+      for (const [, nodeOutput] of Object.entries(chunk)) {
+        if (!nodeOutput || typeof nodeOutput !== "object") continue;
+        const out = nodeOutput as any;
+        if (out.action) action = out.action;
+        if (out.prUrl) prUrl = out.prUrl;
+        if (typeof out.iterationCount === "number") iterationCount = out.iterationCount;
+        if (typeof out.reviewScore === "number") reviewScore = out.reviewScore;
+
+        if (Array.isArray(out.agentLogs)) {
+          for (const entry of out.agentLogs) {
+            accumulatedLogs.push(entry);
+            await publishJobLog(d.jobId, entry);
+          }
+          await persist(d.jobId, "running", accumulatedLogs);
+        }
+      }
+    }
 
     // "declined" is a legitimate terminal state, not a failure: the agent read
     // the issue, judged it non-actionable, and said so on GitHub.
-    const status: JobStatus = final.action === "decline" ? "declined" : "done";
+    const status: JobStatus = action === "decline" ? "declined" : "done";
 
-    await persist(d.jobId, status, final.agentLogs, final.prUrl || undefined);
-    console.log(`${tag} ${status}${final.prUrl ? ` — ${final.prUrl}` : ""}`);
+    await persist(d.jobId, status, accumulatedLogs, prUrl || undefined);
+    await publishJobStatus(d.jobId, status, prUrl || undefined);
+    console.log(`${tag} ${status}${prUrl ? ` — ${prUrl}` : ""}`);
 
     return {
       status,
-      prUrl: final.prUrl,
-      iterations: final.iterationCount,
-      reviewScore: final.reviewScore,
+      prUrl,
+      iterations: iterationCount,
+      reviewScore,
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${tag} failed:`, message);
 
-    await persist(d.jobId, "failed", [
-      {
-        agent: "system",
-        message: `pipeline failed: ${message}`,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
+    const failLog: AgentLog = {
+      agent: "system",
+      message: `pipeline failed: ${message}`,
+      timestamp: new Date().toISOString(),
+    };
+
+    await persist(d.jobId, "failed", [...accumulatedLogs, failLog]);
+    await publishJobLog(d.jobId, failLog);
+    await publishJobStatus(d.jobId, "failed");
 
     // Tell the issue author rather than failing silently. Best-effort: never
     // let a comment failure mask the original error.
