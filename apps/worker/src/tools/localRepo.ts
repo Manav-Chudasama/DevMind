@@ -21,9 +21,11 @@ export interface Worktree {
  * than surfacing a confusing failure at push time.
  */
 async function ensureFullHistory(git: SimpleGit): Promise<void> {
+  // Ensure the remote fetch refspec includes all branches, not just main from single-branch clone
+  await git.raw("config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*").catch(() => {});
   const isShallow = (await git.raw("rev-parse", "--is-shallow-repository")).trim();
   if (isShallow === "true") {
-    await git.fetch(["--unshallow"]);
+    await git.fetch(["--unshallow"]).catch(() => {});
   }
 }
 
@@ -41,23 +43,64 @@ export async function createWorktree(
   const git = simpleGit(clonePath);
 
   await ensureFullHistory(git);
-  // Make sure we branch from the current remote tip, not a stale local ref.
-  await git.fetch("origin");
+  // Fetch all remote branches and prune deleted ones
+  await git.fetch(["origin", "--prune"]).catch(() => {});
 
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "devmind-wt-"));
   // mkdtemp created it; `worktree add` insists on creating it itself.
   await fs.rm(dir, { recursive: true, force: true });
 
-  // Clean up a same-named branch left behind by an earlier failed run.
+  // Clean up any stale worktree metadata and leftover local branch
+  await git.raw("worktree", "prune").catch(() => {});
   await git.raw("branch", "-D", branch).catch(() => {});
 
-  await git.raw("worktree", "add", "-b", branch, dir, "HEAD");
+  // Check if branch already exists on origin (e.g. follow-up commit to an open PR)
+  const remoteBranches: { all: string[] } = await git.branch(["-r"]).catch(() => ({ all: [] }));
+  const remoteBranchExists = remoteBranches.all.some(
+    (b) =>
+      b === `origin/${branch}` ||
+      b === `remotes/origin/${branch}` ||
+      b.endsWith(`/${branch}`)
+  );
+
+  if (remoteBranchExists) {
+    await git.raw("worktree", "add", "-b", branch, dir, `origin/${branch}`);
+  } else {
+    await git.raw("worktree", "add", "-b", branch, dir, "HEAD");
+  }
 
   const wtGit = simpleGit(dir);
   await wtGit.addConfig("user.name", GIT_AUTHOR_NAME);
   await wtGit.addConfig("user.email", GIT_AUTHOR_EMAIL);
 
   return { dir, branch, git: wtGit };
+}
+
+/**
+ * Reads the latest content of a file from a remote branch if it exists,
+ * or falls back to the clone's working tree / disk.
+ */
+export async function readBranchFile(
+  clonePath: string,
+  branch: string | undefined,
+  relPath: string
+): Promise<string> {
+  if (branch) {
+    try {
+      const git = simpleGit(clonePath);
+      const gitPath = relPath.replace(/\\/g, "/");
+      return await git.raw("show", `origin/${branch}:${gitPath}`);
+    } catch {
+      // not on remote branch, fall back to clone disk
+    }
+  }
+  try {
+    const normalised = path.normalize(relPath).replace(/^([/\\])+/, "");
+    const full = path.resolve(clonePath, normalised);
+    return await fs.readFile(full, "utf8");
+  } catch {
+    return "";
+  }
 }
 
 /** Reads a repo-relative file out of the worktree. */

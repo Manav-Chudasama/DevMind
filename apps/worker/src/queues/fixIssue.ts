@@ -57,7 +57,7 @@ export async function handleFixIssue(
 
   await sql`UPDATE jobs SET status = 'running' WHERE id = ${d.jobId}`;
   await publishJobStatus(d.jobId, "running");
-  console.log(`${tag} ${d.issueTitle}`);
+  const accumulatedLogs: AgentLog[] = [];
 
   try {
     const pipeline = buildPipeline();
@@ -71,6 +71,8 @@ export async function handleFixIssue(
         issueTitle: d.issueTitle,
         issueBody: d.issueBody ?? "",
         clonePath,
+        humanFeedback: d.commentFeedback ?? "",
+        branch: d.branch ?? "",
       },
       { streamMode: "updates" }
     );
@@ -79,7 +81,6 @@ export async function handleFixIssue(
     let prUrl = "";
     let iterationCount = 0;
     let reviewScore = 0;
-    const accumulatedLogs: AgentLog[] = [];
 
     for await (const chunk of stream) {
       for (const [, nodeOutput] of Object.entries(chunk)) {

@@ -59,3 +59,21 @@ export async function postIssueComment(
     { owner, repo, issue_number: issueNumber, body }
   );
 }
+
+export async function getExistingPullRequest(
+  owner: string,
+  repo: string,
+  head: string
+): Promise<string | null> {
+  try {
+    const { data: pulls } = await octokit().request("GET /repos/{owner}/{repo}/pulls", {
+      owner,
+      repo,
+      head: `${owner}:${head}`,
+      state: "open",
+    });
+    return pulls[0]?.html_url ?? null;
+  } catch {
+    return null;
+  }
+}

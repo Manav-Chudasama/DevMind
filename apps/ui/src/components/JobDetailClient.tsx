@@ -30,7 +30,7 @@ const AGENT_COLORS: Record<string, string> = {
    ────────────────────────────────────────────── */
 
 function PipelineStepper({ logs, status }: { logs: AgentLog[]; status: string }) {
-  const seenAgents = new Set(logs.map((l) => l.agent));
+  const seenAgents = new Set<string>(logs.map((l) => l.agent));
   const lastAgent = logs.length > 0 ? logs[logs.length - 1].agent : null;
   const isDone = status === "done" || status === "declined" || status === "failed";
 

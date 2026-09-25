@@ -72,7 +72,12 @@ export interface EnsureWebhookResult {
   action: "created" | "reused" | "updated";
 }
 
-const WEBHOOK_EVENTS = ["issues"];
+const WEBHOOK_EVENTS = [
+  "issues",
+  "issue_comment",
+  "pull_request_review_comment",
+  "pull_request_review",
+];
 
 /**
  * Idempotently ensures exactly one DevMind webhook exists on the repo.
@@ -160,3 +165,20 @@ export async function deleteWebhook(
     hook_id: Number(hookId),
   });
 }
+
+export async function getPullRequest(
+  owner: string,
+  repo: string,
+  pullNumber: number
+) {
+  const { data } = await octokit().request(
+    "GET /repos/{owner}/{repo}/pulls/{pull_number}",
+    {
+      owner,
+      repo,
+      pull_number: pullNumber,
+    }
+  );
+  return data;
+}
+

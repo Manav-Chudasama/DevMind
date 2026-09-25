@@ -55,9 +55,13 @@ function buildUserPrompt(state: PipelineStateType): string {
     ? `\n\n## Previously fixed in this repo\n${state.pastMemory}`
     : "";
 
+  const feedbackSection = state.humanFeedback
+    ? `\n\n## Developer Revision Request / Comment:\n${state.humanFeedback}\n(Note: The developer explicitly requested this change. Tailor your plan to address their feedback.)`
+    : "";
+
   return `## Issue #${state.issueNumber}: ${state.issueTitle}
 
-${state.issueBody || "(no description provided)"}
+${state.issueBody || "(no description provided)"}${feedbackSection}
 
 ## Relevant code from the repository
 ${context}${memory}`;

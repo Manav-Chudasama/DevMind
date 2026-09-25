@@ -19,6 +19,8 @@ export const PipelineState = Annotation.Root({
   issueTitle: Annotation<string>,
   issueBody: Annotation<string>,
   clonePath: Annotation<string>,
+  humanFeedback: Annotation<string>({ default: () => "", reducer: (_, b) => b }),
+  branch: Annotation<string>({ default: () => "", reducer: (_, b) => b }),
 
   // ── Orchestrator ────────────────────────────────────────────────────────
   pastMemory: Annotation<string>({ default: () => "", reducer: (_, b) => b }),

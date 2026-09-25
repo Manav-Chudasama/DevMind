@@ -8,13 +8,15 @@ import { log, type PipelineStateType } from "../graph/state";
 export async function orchestratorAgent(state: PipelineStateType) {
   const pastMemory = await recallMemory(state.repoId);
 
+  const memoryMsg = pastMemory
+    ? `recalled ${pastMemory.split("\n").length} prior fix note(s)`
+    : "no prior memory for this repo";
+  const feedbackMsg = state.humanFeedback
+    ? ` | processing comment feedback: "${state.humanFeedback.slice(0, 80)}..."`
+    : "";
+
   return {
     pastMemory,
-    ...log(
-      "orchestrator",
-      pastMemory
-        ? `recalled ${pastMemory.split("\n").length} prior fix note(s)`
-        : "no prior memory for this repo"
-    ),
+    ...log("orchestrator", `${memoryMsg}${feedbackMsg}`),
   };
 }

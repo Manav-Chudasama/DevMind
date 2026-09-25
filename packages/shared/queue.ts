@@ -32,4 +32,8 @@ export interface FixIssueJob {
    * Phase 4 don't carry it — the handler falls back to repos.clone_path.
    */
   clonePath?: string;
+  /** Present when triggered by a human comment or review feedback */
+  commentFeedback?: string;
+  /** Head branch name to checkout/push when revising an existing PR or branch */
+  branch?: string;
 }

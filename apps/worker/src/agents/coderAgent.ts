@@ -5,6 +5,7 @@ import { createTwoFilesPatch } from "diff";
 import type { FileDiff } from "@devmind/shared";
 import { complete } from "../llm";
 import { log, type PipelineStateType } from "../graph/state";
+import { readBranchFile } from "../tools/localRepo";
 
 const FileEditSchema = z.object({
   file_path: z.string().describe("Repo-relative path, exactly as given"),
@@ -45,13 +46,6 @@ function resolveSafe(root: string, relPath: string): string {
   return full;
 }
 
-async function readOriginal(clonePath: string, relPath: string): Promise<string> {
-  try {
-    return await fs.readFile(resolveSafe(clonePath, relPath), "utf8");
-  } catch {
-    return ""; // new file
-  }
-}
 
 /**
  * Models routinely drop the final newline, which shows up in every PR as a
@@ -87,7 +81,7 @@ export async function coderAgent(state: PipelineStateType) {
   // informed by feedback, not an incremental patch on top of a rejected one.
   const originals = new Map<string, string>();
   for (const relPath of state.targetFiles) {
-    originals.set(relPath, await readOriginal(state.clonePath, relPath));
+    originals.set(relPath, await readBranchFile(state.clonePath, state.branch, relPath));
   }
 
   const fileBlocks = [...originals.entries()]
@@ -98,6 +92,10 @@ export async function coderAgent(state: PipelineStateType) {
     state.reviewFeedback && iteration > 1
       ? `\n\n## Review feedback on your previous attempt (score ${state.reviewScore}/10)\n${state.reviewFeedback}\n\nAddress these points.`
       : "";
+
+  const humanNotes = state.humanFeedback
+    ? `\n\n## Developer Request / Human Feedback:\n${state.humanFeedback}\n\nMake sure your changes directly address this feedback from the developer.`
+    : "";
 
   const result = await complete({
     agent: "coder",
@@ -110,7 +108,7 @@ ${state.issueBody}
 ${state.plan}
 
 ## Current file contents
-${fileBlocks}${feedback}`,
+${fileBlocks}${humanNotes}${feedback}`,
     schema: CoderSchema,
     temperature: 0.1,
   });
@@ -120,7 +118,9 @@ ${fileBlocks}${feedback}`,
   const codeDiffs: FileDiff[] = [];
   for (const file of result.files) {
     resolveSafe(state.clonePath, file.file_path); // throws on traversal
-    const original = originals.get(file.file_path) ?? (await readOriginal(state.clonePath, file.file_path));
+    const original =
+      originals.get(file.file_path) ??
+      (await readBranchFile(state.clonePath, state.branch, file.file_path));
 
     const patched = restoreTrailingNewline(
       original,
