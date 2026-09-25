@@ -32,6 +32,8 @@ This project was designed to implement every major concept in modern agentic AI 
 | **Parallel Execution** | Multiple issues processed simultaneously via BullMQ worker pool |
 | **Real-time Streaming** | Agent logs streamed live to UI via SSE |
 | **Webhook-driven Architecture** | GitHub fires events → system reacts autonomously |
+| **Supervisor-Worker Pattern** | Dedicated Supervisor agent monitors Coder tool calls, verifies intent, and catches hallucinations |
+| **Stepwise Multi-File Tooling** | Large 10+ file issues decomposed into execution checklists with search-and-replace blocks |
 
 ---
 
@@ -175,6 +177,48 @@ Three apps (api, worker, ui) share types from a `packages/shared` package. This 
 - Identifies: bugs, regressions, style issues, incomplete fixes
 - If score < 7: sends feedback back to Coder (max 3 iterations)
 - If score >= 7: approves → PR creation proceeds
+
+---
+
+## Stepwise Multi-File Architecture: Supervisor-Worker & Tool Guardrails
+
+### The Challenge of Large & Multi-File Issues (10+ Files)
+When an issue spans 10 to 20+ files, generating full files in a single prompt is impractical:
+- Exceeds output token limits and drastically increases LLM latency.
+- Increases the risk of hallucinations, import drift, and circular regressions.
+
+To handle large-scale changes safely, DevMind incorporates a **Supervisor-Worker Stepwise Tool Architecture**.
+
+### 1. Stepwise Decomposition via Vector Embeddings
+- The **Planner Agent** queries `pgvector` embeddings to map file dependencies across the codebase.
+- Decomposes the large task into an ordered **Execution Checklist / DAG**:
+  1. *Step 1: Core types & shared interfaces (`packages/shared`)*
+  2. *Step 2: Core business logic & database layer (`services/`)*
+  3. *Step 3: API endpoints & routes (`routes/`)*
+  4. *Step 4: UI components & integration points (`ui/`)*
+
+### 2. Coder Tool Suite (Precision Editing)
+Instead of rewriting whole files, the Coder Agent acts via granular tools:
+- `search_code(query, repoId)`: Finds specific symbol usages or definitions across the repo.
+- `read_snippet(filePath, startLine, endLine)`: Reads targeted code windows without loading thousands of lines into context.
+- `replace_block(filePath, searchBlock, replaceBlock)`: Performs surgical Search-and-Replace modifications (~90% token savings over full-file rewrites).
+
+### 3. The Supervisor Agent (Tool Guardrail & Trajectory Monitor)
+A dedicated **Supervisor Agent** oversees the Coder's execution:
+- **Full Trajectory Context**: Retains the complete history of previous tool calls, file reads, and patch attempts.
+- **Hallucination & Drift Detection**:
+  - Checks if the Coder is editing files outside the planned scope.
+  - Detects circular edit loops (e.g. repeatedly reverting the same lines).
+  - Evaluates whether proposed changes align with the original issue instructions.
+- **Intervention & Steering**: If the Supervisor detects an error or hallucination, it **interrupts the tool call before applying it to disk**, providing structured feedback directing the Coder back on track.
+
+### 4. Two-Tier Guardrail Pipeline
+1. **Tier 1 — Fast Programmatic Guardrails (0ms, 0 Tokens)**:
+   - Path-traversal protection (`resolveSafe`).
+   - File existence validation and regex matching for search blocks.
+   - Syntax & AST check (e.g. `bun check` or TypeScript parse) to catch syntax errors instantly.
+2. **Tier 2 — Supervisor LLM Guardrails (Milestone Verification)**:
+   - Evaluates sub-task completion against the Planner's checklist before unlocking the next milestone.
 
 ---
 
@@ -478,7 +522,20 @@ START
 - [ ] Inject as context: "Previously, similar auth issues were fixed by..."
 - [ ] On job complete: `SET agent:memory:{repoId}:patterns` with new pattern
 
-**✅ Done when:** Open a real GitHub issue → worker logs show all 5 agents running → PR opened with correct code change → comment on issue with PR link
+#### 4e — Stepwise Multi-File Tooling & Supervisor Guardrails (Large Issues)
+
+- [ ] **Stepwise Planner**: Decompose multi-file issues (10+ files) into a structured execution checklist (ordered by dependencies).
+- [ ] **Granular Coder Tools**:
+  - `search_code(query, repoId)` for targeted symbol lookups
+  - `read_snippet(filePath, startLine, endLine)` for localized window reads
+  - `replace_block(filePath, searchBlock, replaceBlock)` for precision diff replacement (~90% token reduction)
+- [ ] **Supervisor Agent**:
+  - Track full trajectory of Coder's tool calls and previous actions
+  - Verify every tool call for hallucinations, path traversal, or circular edit loops
+  - Intervene with corrective steering feedback when drift is detected
+- [ ] **Two-Tier Validation**: Programmatic AST/syntax check (Tier 1) + Supervisor milestone approval (Tier 2)
+
+**✅ Done when:** Open a real GitHub issue → worker logs show all agents running → PR opened with correct code change → comment on issue with PR link
 
 ---
 

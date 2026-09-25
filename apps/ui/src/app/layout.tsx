@@ -1,19 +1,24 @@
 import type { Metadata } from "next";
+import "./globals.css";
+import { NavBar } from "@/components/NavBar";
 
 export const metadata: Metadata = {
-  title: "DevMind",
-  description: "Autonomous multi-agent platform for fixing GitHub issues",
+  title: { template: "%s | DevMind", default: "DevMind" },
+  description: "Autonomous multi-agent platform that watches GitHub repos and fixes issues automatically.",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ margin: 0, fontFamily: "monospace", background: "#0d1117", color: "#e6edf3" }}>
-        {children}
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      </head>
+      <body>
+        <NavBar />
+        <div className="page-wrapper">
+          {children}
+        </div>
       </body>
     </html>
   );

@@ -39,7 +39,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
     new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
   ]);
 
-app.get("/health", async (_req, res) => {
+const healthHandler = async (_req: express.Request, res: express.Response) => {
   const postgresStatus = await withTimeout(
     sql`SELECT 1`.then(() => "up" as const).catch(() => "down" as const),
     1500,
@@ -71,7 +71,10 @@ app.get("/health", async (_req, res) => {
     redis: redisStatus,
     worker,
   });
-});
+};
+
+app.get("/health", healthHandler);
+app.get("/api/health", healthHandler);
 
 // ─── Bootstrap ────────────────────────────────────────────────────────────────
 
