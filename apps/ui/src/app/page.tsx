@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 import type { Repo, Job } from "@devmind/shared";
-import Link from "next/link";
 import { MetricCard } from "@/components/MetricCard";
-import { QueueMonitor } from "@/components/QueueMonitor";
-import { ActiveWorkflows } from "@/components/ActiveWorkflows";
-import { RecentJobsTable } from "@/components/RecentJobsTable";
+import { DashboardWorkflowView } from "@/components/DashboardWorkflowView";
 
 export const metadata: Metadata = { title: "Overview" };
 
@@ -39,8 +36,8 @@ export default async function OverviewPage() {
     : 0;
 
   return (
-    <main className="page-content">
-      {/* KPI Metrics */}
+    <main className="page-content page-content--wide">
+      {/* 1. Header KPI Metrics */}
       <div className="metric-grid mb-24">
         <MetricCard
           label="Active Workflows"
@@ -72,24 +69,8 @@ export default async function OverviewPage() {
         />
       </div>
 
-      {/* Queue Monitor + Active Workflows */}
-      <div className="grid-sidebar mb-24">
-        <QueueMonitor />
-        <ActiveWorkflows jobs={runningJobs} repos={repos} />
-      </div>
-
-      {/* Recent Activity */}
-      <div className="section-header">
-        <div>
-          <div className="section-title">Recent Activity</div>
-          <div className="section-sub">Latest 20 issue processing jobs</div>
-        </div>
-        <Link href="/jobs" className="btn btn--ghost btn--sm">View All →</Link>
-      </div>
-
-      <div className="card">
-        <RecentJobsTable jobs={jobs.slice(0, 20)} repos={repos} />
-      </div>
+      {/* 2. Master-Detail Queue & Process Inspector */}
+      <DashboardWorkflowView initialJobs={jobs} repos={repos} />
     </main>
   );
 }
